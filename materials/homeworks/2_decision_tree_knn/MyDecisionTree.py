@@ -95,19 +95,17 @@ class DecisionTree(BaseEstimator):
 
         def entropy(y):
             partials = np.zeros(shape = y.shape[0])
+            logs = np.log2(np.arange(y.shape[0] + 1))
             counter = {}
-            cur_sum = 0.0
             cur_log_sum = 0.0
             for i, y_i in enumerate(y):
-                count_y_i = counter.get(y_i, 0.0)
+                count_y_i = counter.get(y_i, 0)
                 if count_y_i > 0:
-                    cur_sum -= count_y_i
-                    cur_log_sum -= count_y_i * np.log2(count_y_i)
+                    cur_log_sum -= count_y_i * logs[count_y_i]
                 count_y_i += 1
-                cur_sum += count_y_i
-                cur_log_sum += count_y_i * np.log2(count_y_i)
+                cur_log_sum += count_y_i * logs[count_y_i]
                 counter[y_i] = count_y_i
-                partials[i] = (np.log2(i + 1) * cur_sum - cur_log_sum) / (i + 1)
+                partials[i] = (logs[i + 1] * (i + 1) - cur_log_sum) / (i + 1)
             return partials
         
         def gini(y):
@@ -115,13 +113,13 @@ class DecisionTree(BaseEstimator):
             counter = {}
             cur_sum_squared = 0.0
             for i, y_i in enumerate(y):
-                count_y_i = counter.get(y_i, 0.0)
+                count_y_i = counter.get(y_i, 0)
                 if count_y_i > 0:
-                    cur_sum_squared -= count_y_i ** 2
+                    cur_sum_squared -= count_y_i * count_y_i 
                 count_y_i += 1
-                cur_sum_squared += count_y_i ** 2
+                cur_sum_squared += count_y_i * count_y_i
                 counter[y_i] = count_y_i
-                partials[i] = 1 - cur_sum_squared / (i + 1) ** 2
+                partials[i] = 1 - cur_sum_squared / ((i + 1) * (i + 1))
             return partials
         
         def variance(y):
@@ -165,7 +163,7 @@ class DecisionTree(BaseEstimator):
             return partials
         
         def classify(y):
-            probabilities = dict(Counter(y))
+            probabilities = Counter(y)
             result = None
             for tag, count in probabilities.items():
                 if result == None or count > biggest_count:
