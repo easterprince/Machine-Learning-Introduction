@@ -14,7 +14,7 @@ class DecisionTree(BaseEstimator):
     class TreeNode:
         def __init__(self, tree, measure, predict, X, y, depth = 0, class_count = 0):
             self.__tree = tree
-            self.__predicted = predict(y)
+            self.__predicted = None
             self.__feature = None
             self.__threshold = None
             self.__left_child = None
@@ -22,6 +22,7 @@ class DecisionTree(BaseEstimator):
             self.__class_count = class_count
 
             if depth >= tree.max_depth or X.shape[0] < tree.min_samples_split:
+                self.__predicted = predict(y)
                 return
             
             for feature in range(X.shape[1]):
@@ -45,6 +46,8 @@ class DecisionTree(BaseEstimator):
                 go_left = (X[:, self.__feature] < self.__threshold)
                 self.__left_child = tree.TreeNode(tree, measure, predict, X[go_left], y[go_left], depth + 1, class_count)
                 self.__right_child = tree.TreeNode(tree, measure, predict, X[~go_left], y[~go_left], depth + 1, class_count)
+            else:
+                self.__predicted = predict(y)
         
         def predict(self, X, probability = False):
             if not probability:
@@ -56,7 +59,8 @@ class DecisionTree(BaseEstimator):
                     if not probability:
                         predicted[:] = self.__predicted[0]
                     else:
-                        predicted[:, list(self.__predicted[1].keys())] = list(self.__predicted[1].values())
+                        for tag, p in self.__predicted[1].items():
+                            predicted[:, tag] = p
                 else:
                     go_left = (X[:, self.__feature] < self.__threshold)
                     predicted[go_left] = self.__left_child.predict(X[go_left], probability = probability)
@@ -76,8 +80,8 @@ class DecisionTree(BaseEstimator):
         if X.shape[0] != y.shape[0]:
             raise ValueError('Numbers of objects in X and y are not equal.')
         measure, predict = self.__get_methods(self.criterion)
-        tree.__class_count = int(np.max(y) + 1)
-        self.__root = self.TreeNode(self, measure, predict, X, y, class_count = tree.__class_count)
+        self.__class_count = int(np.max(y) + 1)
+        self.__root = self.TreeNode(self, measure, predict, X, y, class_count = self.__class_count)
             
     def predict(self, X, probability = False):
         if self.__root == None:
