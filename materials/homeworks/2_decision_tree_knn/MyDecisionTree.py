@@ -92,10 +92,21 @@ class DecisionTree(BaseEstimator):
         return self.predict(X, probability = True)
     
     def __get_methods(self, criterion):
-
+        
+        def classic_entropy(y):
+            partials = np.zeros(shape = y.shape[0])
+            counter = {}
+            for i, y_i in enumerate(y):
+                counter[y_i] = counter.get(y_i, 0) + 1
+                p = np.array(list(counter.values())) / (i + 1)
+                partials[i] = -np.sum(p * np.log2(p))
+            return partials
+        
         def entropy(y):
             partials = np.zeros(shape = y.shape[0])
-            logs = np.log2(np.arange(y.shape[0] + 1))
+            logs = self.__logs
+            while len(logs) <= y.shape[0]:
+                logs.append(np.log2(len(logs)))
             counter = {}
             cur_log_sum = 0.0
             for i, y_i in enumerate(y):
@@ -106,6 +117,15 @@ class DecisionTree(BaseEstimator):
                 cur_log_sum += count_y_i * logs[count_y_i]
                 counter[y_i] = count_y_i
                 partials[i] = (logs[i + 1] * (i + 1) - cur_log_sum) / (i + 1)
+            return partials
+        
+        def classic_gini(y):
+            partials = np.zeros(shape = y.shape[0])
+            counter = {}
+            for i, y_i in enumerate(y):
+                counter[y_i] = counter.get(y_i, 0) + 1
+                p = np.array(list(counter.values())) / (i + 1)
+                partials[i] = 1 - np.sum(p * p)
             return partials
         
         def gini(y):
@@ -122,6 +142,13 @@ class DecisionTree(BaseEstimator):
                 partials[i] = 1 - cur_sum_squared / ((i + 1) * (i + 1))
             return partials
         
+        def classic_variance(y):
+            partials = np.zeros(shape = y.shape[0])
+            for i in range(y.shape[0]):
+                prefix = y[:(i + 1)]
+                partials[i] = np.mean((prefix - np.mean(prefix)) ** 2)
+            return partials
+        
         def variance(y):
             partials = np.zeros(shape = y.shape[0])
             cur_sum = 0.0
@@ -132,14 +159,21 @@ class DecisionTree(BaseEstimator):
                 partials[i] = cur_square_sum / (i + 1) - (cur_sum / (i + 1)) ** 2
             return partials
         
-        def mad_median(y):
+        def classic_mad_median(y):
+            partials = np.zeros(shape = y.shape[0])
+            for i in range(y.shape[0]):
+                prefix = y[:(i + 1)]
+                partials[i] = np.mean(np.abs(prefix - np.median(prefix)))
+            return partials
+        
+        def classic_mad_median(y):
             partials = np.zeros(shape = y.shape[0])
             left_sum = 0.0
             left_heap = []
             right_sum = 0.0
             right_heap = []
             for i, num in enumerate(y):
-                if len(left_heap) == 0 or -num > left_heap[0]:
+                if len(left_heap) == 0 or num < -left_heap[0]:
                     left_sum += num
                     heapq.heappush(left_heap, -num) 
                 else:
@@ -156,10 +190,40 @@ class DecisionTree(BaseEstimator):
                     right_sum += num
                     heapq.heappush(right_heap, num)
                 if len(left_heap) == len(right_heap):
-                    median = (right_heap[0] - left_heap[0]) / 2
+                    median = (-left_heap[0] + right_heap[0]) / 2
                 else:
                     median = -left_heap[0]
-                partials[i] = (right_sum + (len(left_heap) - len(right_heap)) * median - left_sum) / (i + 1)
+                partials[i] = (right_sum - left_sum + (len(left_heap) - len(right_heap)) * median) / (i + 1)
+            return partials
+        
+        def mad_median(y):
+            partials = np.zeros(shape = y.shape[0])
+            left_sum = 0.0
+            left_heap = []
+            right_sum = 0.0
+            right_heap = []
+            for i, num in enumerate(y):
+                if len(left_heap) == 0 or num < -left_heap[0]:
+                    left_sum += num
+                    heapq.heappush(left_heap, -num) 
+                else:
+                    right_sum += num
+                    heapq.heappush(right_heap, num)
+                if len(left_heap) < len(right_heap):
+                    num = heapq.heappop(right_heap)
+                    right_sum -= num
+                    left_sum += num
+                    heapq.heappush(left_heap, -num) 
+                elif len(left_heap) > len(right_heap) + 1:
+                    num = -heapq.heappop(left_heap)
+                    left_sum -= num
+                    right_sum += num
+                    heapq.heappush(right_heap, num)
+                if len(left_heap) == len(right_heap):
+                    median = (-left_heap[0] + right_heap[0]) / 2
+                else:
+                    median = -left_heap[0]
+                partials[i] = (right_sum - left_sum + (len(left_heap) - len(right_heap)) * median) / (i + 1)
             return partials
         
         def classify(y):
@@ -175,11 +239,18 @@ class DecisionTree(BaseEstimator):
         def interpolate(y):
             return y.mean(), None
         
+        if criterion == 'entropy':
+            self.__logs = [0]
+        
         criterions = {
             'entropy': (entropy, classify),
             'gini': (gini, classify),
             'variance': (variance, interpolate),
-            'mad_median': (mad_median, interpolate)
+            'mad_median': (mad_median, interpolate),
+            'classic_entropy': (classic_entropy, classify),
+            'classic_gini': (classic_gini, classify),
+            'classic_variance': (classic_variance, interpolate),
+            'classic_mad_median': (classic_mad_median, interpolate)
         }
         if criterion not in criterions:
             raise self.UnknownCriterionError(criterion)
