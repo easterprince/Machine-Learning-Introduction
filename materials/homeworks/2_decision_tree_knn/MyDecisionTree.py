@@ -4,6 +4,9 @@ from collections import Counter
 import heapq
 
 
+median_dif = 0.0
+
+
 class DecisionTree(BaseEstimator):
     class NotFittedError(Exception):
         pass
@@ -14,6 +17,7 @@ class DecisionTree(BaseEstimator):
     class TreeNode:
         def __init__(self, tree, measure, predict, X, y, depth = 0, class_count = 0):
             self.__tree = tree
+            self.__depth = depth
             self.__predicted = None
             self.__feature = None
             self.__threshold = None
@@ -70,8 +74,17 @@ class DecisionTree(BaseEstimator):
                     predicted[~go_left] = self.__right_child.predict(X[~go_left], probability = probability)
             return predicted
 
-    def __init__(self, max_depth = np.inf, min_samples_split = 2,
-                 criterion = 'gini', debug = False):
+        def __str__(self):
+            res = ''
+            if self.__left_child is not None:
+                res += self.__left_child.__str__()
+            res += '{0}[node ({1}): feature = {2}, threshold = {3}, prediction = {4}]\n'.format(
+                '  ' * self.__depth, self.__depth, self.__feature, self.__threshold, self.__predicted)
+            if self.__right_child is not None:
+                res += self.__right_child.__str__()
+            return res
+
+    def __init__(self, max_depth = np.inf, min_samples_split = 2, criterion = 'gini', debug = False):
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.criterion = criterion
@@ -83,17 +96,30 @@ class DecisionTree(BaseEstimator):
     def fit(self, X, y):
         if X.shape[0] != y.shape[0]:
             raise ValueError('Numbers of objects in X and y are not equal.')
+        if len(X.shape) != 2:
+            raise ValueError('X must be 2-dimensional.')
+        if len(y.shape) != 1:
+            raise ValueError('y must be 1-dimensional.')
         measure, predict = self.__get_methods(self.criterion)
         self.__class_count = int(np.max(y) + 1)
         self.__root = self.TreeNode(self, measure, predict, X, y, class_count = self.__class_count)
 
     def predict(self, X, probability = False):
+        if len(X.shape) != 2:
+            raise ValueError('X must be 2-dimensional.')
         if self.__root is None:
             raise self.NotFittedError
         return self.__root.predict(X, probability = probability)
 
     def predict_proba(self, X):
+        if len(X.shape) != 2:
+            raise ValueError('X must be 2-dimensional.')
         return self.predict(X, probability = True)
+
+    def __str__(self):
+        res = 'DecisionTree:\n'
+        res += self.__root.__str__()
+        return res
 
     def __get_methods(self, criterion):
 
@@ -164,12 +190,13 @@ class DecisionTree(BaseEstimator):
             return partials
 
         def classic_mad_median(y):
+            global median_dif
             partials = np.zeros(shape = y.shape[0])
             for i in range(y.shape[0]):
                 prefix = y[:(i + 1)]
                 partials[i] = np.mean(np.abs(prefix - np.median(prefix)))
             dif = np.max(np.abs(partials - mad_median(y)))
-            self.median_dif_ = max(self.median_dif_, dif)
+            median_dif = max(median_dif, dif)
             return partials
 
         def mad_median(y):
@@ -233,3 +260,8 @@ class DecisionTree(BaseEstimator):
             raise self.UnknownCriterionError(criterion)
         measure, predict = criteria[criterion]
         return measure, predict
+
+    @staticmethod
+    def median_dif():
+        global median_dif
+        return median_dif
